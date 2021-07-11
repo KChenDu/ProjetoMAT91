@@ -122,6 +122,12 @@ class AirConditioner:
             return -self.k - self.kac
         return -self.k
 
+    def reset_timer(self):
+        self.period_clock = -1
+        self.period = -1
+        self.last_start_moment = 0
+        self.action_time = 0
+
     def get_period(self):
         return self.period
 

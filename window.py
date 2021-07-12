@@ -24,8 +24,8 @@ from matplotlib.figure import Figure
 from air_conditioner import AirConditioner, Mode
 from methods import euler, taylor2, trapezium, mean, rk4, rkf, pc
 
-def create_param_spin(title, initial, callback):
-    adjustment = Gtk.Adjustment(upper=500, step_increment=0.1, page_increment=1)
+def create_param_spin(title, initial, callback, increment):
+    adjustment = Gtk.Adjustment(upper=2000, step_increment=increment, page_increment=1)
     box_param = Gtk.Box()
     box_param.set_homogeneous(True)
 
@@ -74,7 +74,7 @@ class MatWindow(Gtk.Window):
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
         self.integrators = [False] * Integrator.COUNT.value
         self.int_functions = [euler, taylor2, trapezium, mean, rk4, rkf, pc]
-        self.int_res = [( [1], [1] )] * Integrator.COUNT.value
+        self.int_res = [( [1], [1], 0, 0 )] * Integrator.COUNT.value
 
         self.set_border_width(10)
         self.set_default_size(1920, 1080)
@@ -98,23 +98,23 @@ class MatWindow(Gtk.Window):
         param_frame.add(self.param_box)
 
 
-        box_tac = create_param_spin("Tac:", self.Tac, self.tac_spin_changed)
+        box_tac = create_param_spin("Coils Temperature (Tac):", self.Tac, self.tac_spin_changed, 1.0)
         self.param_box.add(box_tac)
-        box_tout = create_param_spin("Tout:", self.Tout, self.tout_spin_changed)
+        box_tout = create_param_spin("Outside Air Temperature (Tout):", self.Tout, self.tout_spin_changed, 1.0)
         self.param_box.add(box_tout)
-        box_k = create_param_spin("k:", self.k, self.k_spin_changed)
+        box_k = create_param_spin("Wall cooling coefficient (k):", self.k, self.k_spin_changed, 0.01)
         self.param_box.add(box_k)
-        box_kac = create_param_spin("kac:", self.kac, self.kac_spin_changed)
+        box_kac = create_param_spin("Coils cooling coefficient (kac):", self.kac, self.kac_spin_changed, 0.01)
         self.param_box.add(box_kac)
-        box_tc_low = create_param_spin("Tc low:", self.Tc_low, self.tc_low_spin_changed)
+        box_tc_low = create_param_spin("Low Control Temperature (Tc Low):", self.Tc_low, self.tc_low_spin_changed, 1.0)
         self.param_box.add(box_tc_low)
-        box_tc_high = create_param_spin("Tc high:", self.Tc_high, self.tc_high_spin_changed)
+        box_tc_high = create_param_spin("High Control Temperature (Tc High):", self.Tc_high, self.tc_high_spin_changed, 1.0)
         self.param_box.add(box_tc_high)
-        box_tr = create_param_spin("Tr:", self.Tr, self.tr_spin_changed)
+        box_tr = create_param_spin("Initial Room Temperature (Tr):", self.Tr, self.tr_spin_changed, 1.0)
         self.param_box.add(box_tr)
-        box_tf = create_param_spin("Tf:", self.tf, self.tf_spin_changed)
+        box_tf = create_param_spin("Time Extensionf for analysis (tf):", self.tf, self.tf_spin_changed, 1.0)
         self.param_box.add(box_tf)
-        box_n = create_param_spin("Steps:", self.n, self.n_spin_changed)
+        box_n = create_param_spin("Number of Steps (n):", self.n, self.n_spin_changed, 1.0)
         self.param_box.add(box_n)
         mode = Gtk.ListStore(int, str)
         mode.append([1, "Cool"])
@@ -122,6 +122,7 @@ class MatWindow(Gtk.Window):
         name_combo = Gtk.ComboBox.new_with_model_and_entry(mode)
         name_combo.connect("changed", self.on_name_combo_changed)
         name_combo.set_entry_text_column(1)
+        name_combo.set_active(1)
         self.param_box.add(name_combo)
 
         integrator_frame = Gtk.Frame(label="Método de Integração")
@@ -168,27 +169,34 @@ class MatWindow(Gtk.Window):
         self.first_sim_run = True
 
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
+        self.airConditioner.reset_timer()
 
         t, Teuler = euler(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.EULER.value] = (t, Teuler)
+        self.int_res[Integrator.EULER.value] = (t, Teuler, self.airConditioner.get_period(), self.airConditioner.get_action_time())
 
+        self.airConditioner.reset_timer()
         t, Ttaylor2 = taylor2(self.airConditioner.act, self.airConditioner.act_t, self.airConditioner.act_y, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.TAYLOR2.value] = (t, Ttaylor2)
+        self.int_res[Integrator.TAYLOR2.value] = (t, Ttaylor2, self.airConditioner.get_period(), self.airConditioner.get_action_time())
 
+        self.airConditioner.reset_timer()
         t, Ttrapezium = trapezium(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.TRAPEZIUM.value] = (t, Ttrapezium)
+        self.int_res[Integrator.TRAPEZIUM.value] = (t, Ttrapezium, self.airConditioner.get_period(), self.airConditioner.get_action_time())
 
+        self.airConditioner.reset_timer()
         t, Ttmean = mean(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.MEAN.value] = (t, Ttmean)
+        self.int_res[Integrator.MEAN.value] = (t, Ttmean, self.airConditioner.get_period(), self.airConditioner.get_action_time())
 
+        self.airConditioner.reset_timer()
         t, Ttrk4 = rk4(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.RK4.value] = (t, Ttrk4)
+        self.int_res[Integrator.RK4.value] = (t, Ttrk4, self.airConditioner.get_period(), self.airConditioner.get_action_time())
 
+        self.airConditioner.reset_timer()
         t, Ttrkf = rkf(self.airConditioner.act, 0, self.tf, self.Tr, 0.1, 0.1, 0.01)
-        self.int_res[Integrator.RKF.value] = (t, Ttrkf)
+        self.int_res[Integrator.RKF.value] = (t, Ttrkf, self.airConditioner.get_period(), self.airConditioner.get_action_time())
 
+        self.airConditioner.reset_timer()
         t, Ttpc = pc(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.PC.value] = (t, Ttpc)
+        self.int_res[Integrator.PC.value] = (t, Ttpc, self.airConditioner.get_period(), self.airConditioner.get_action_time())
 
         self.plot(button)
 
@@ -205,37 +213,51 @@ class MatWindow(Gtk.Window):
         if (self.integrators[Integrator.EULER.value] == True):
             t = self.int_res[Integrator.EULER.value][0]
             Teuler = self.int_res[Integrator.EULER.value][1]
-            self.ax.plot(t, Teuler, label="Euler")
+            period = self.int_res[Integrator.EULER.value][2]
+            action_time = self.int_res[Integrator.EULER.value][3]
+            self.ax.plot(t, Teuler, label="Euler, Period = " + str(period) + ", Action Time = " + str(action_time))
 
         if (self.integrators[Integrator.TAYLOR2.value] == True):
             t = self.int_res[Integrator.TAYLOR2.value][0]
             Ttaylor2 = self.int_res[Integrator.TAYLOR2.value][1]
-            self.ax.plot(t, Ttaylor2, label="Taylor2")
+            period = self.int_res[Integrator.TAYLOR2.value][2]
+            action_time = self.int_res[Integrator.TAYLOR2.value][3]
+            self.ax.plot(t, Ttaylor2, label="Taylor2, Period = " + str(period) + ", Action Time = " + str(action_time))
 
         if (self.integrators[Integrator.TRAPEZIUM.value] == True):
             t = self.int_res[Integrator.TRAPEZIUM.value][0]
             Ttrapezium = self.int_res[Integrator.TRAPEZIUM.value][1]
-            self.ax.plot(t, Ttrapezium, label="Trapezium")
+            period = self.int_res[Integrator.TRAPEZIUM.value][2]
+            action_time = self.int_res[Integrator.TRAPEZIUM.value][3]
+            self.ax.plot(t, Ttrapezium, label="Trapezium, Period = " + str(period) + ", Action Time = " + str(action_time))
 
         if (self.integrators[Integrator.MEAN.value] == True):
             t = self.int_res[Integrator.MEAN.value][0]
             Ttmean = self.int_res[Integrator.MEAN.value][1]
-            self.ax.plot(t, Ttmean, label="Mean")
+            period = self.int_res[Integrator.MEAN.value][2]
+            action_time = self.int_res[Integrator.MEAN.value][3]
+            self.ax.plot(t, Ttmean, label="Mean, Period = " + str(period) + ", Action Time = " + str(action_time))
 
         if (self.integrators[Integrator.RK4.value] == True):
             t = self.int_res[Integrator.RK4.value][0]
             Ttrk4 = self.int_res[Integrator.RK4.value][1]
-            self.ax.plot(t, Ttrk4, label="RK4")
+            period = self.int_res[Integrator.RK4.value][2]
+            action_time = self.int_res[Integrator.RK4.value][3]
+            self.ax.plot(t, Ttrk4, label="RK4, Period = " + str(period) + ", Action Time = " + str(action_time))
 
         if (self.integrators[Integrator.RKF.value] == True):
             t = self.int_res[Integrator.RKF.value][0]
             Ttrkf = self.int_res[Integrator.RKF.value][1]
-            self.ax.plot(t, Ttrkf, label="RKF")
+            period = self.int_res[Integrator.RKF.value][2]
+            action_time = self.int_res[Integrator.RKF.value][3]
+            self.ax.plot(t, Ttrkf, label="RKF, Period = " + str(period) + ", Action Time = " + str(action_time))
 
         if (self.integrators[Integrator.PC.value] == True):
             t = self.int_res[Integrator.PC.value][0]
             Ttpc = self.int_res[Integrator.PC.value][1]
-            self.ax.plot(t, Ttpc, label="PC")
+            period = self.int_res[Integrator.PC.value][2]
+            action_time = self.int_res[Integrator.PC.value][3]
+            self.ax.plot(t, Ttpc, label="PC, Period = " + str(period) + ", Action Time = " + str(action_time))
 
 
         self.ax.legend()

@@ -75,6 +75,8 @@ class MatWindow(Gtk.Window):
         self.integrators = [False] * Integrator.COUNT.value
         self.int_functions = [euler, taylor2, trapezium, mean, rk4, rkf, pc]
         self.int_res = [( [1], [1], 0, 0 )] * Integrator.COUNT.value
+        self.t_truth = []
+        self.ground_truth = []
 
         self.set_border_width(10)
         self.set_default_size(1920, 1080)
@@ -165,8 +167,49 @@ class MatWindow(Gtk.Window):
         self.canvas.set_size_request(800, 600)
         frame2.add(self.canvas)
 
+    def calc_ground_truth(self):
+        n = 100000
+        self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
+        self.airConditioner.reset_timer()
+
+        t, Teuler = euler(self.airConditioner.act, 0, self.tf, n, self.Tr)
+        self.int_res[Integrator.EULER.value] = (t, Teuler, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+
+        self.airConditioner.reset_timer()
+        t, Ttaylor2 = taylor2(self.airConditioner.act, self.airConditioner.act_t, self.airConditioner.act_y, 0, self.tf, n, self.Tr)
+        self.int_res[Integrator.TAYLOR2.value] = (t, Ttaylor2, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+
+        self.airConditioner.reset_timer()
+        t, Ttrapezium = trapezium(self.airConditioner.act, 0, self.tf, n, self.Tr)
+        self.int_res[Integrator.TRAPEZIUM.value] = (t, Ttrapezium, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+
+        self.airConditioner.reset_timer()
+        t, Ttmean = mean(self.airConditioner.act, 0, self.tf, n, self.Tr)
+        self.int_res[Integrator.MEAN.value] = (t, Ttmean, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+
+        self.airConditioner.reset_timer()
+        t, Ttrk4 = rk4(self.airConditioner.act, 0, self.tf, n, self.Tr)
+        self.int_res[Integrator.RK4.value] = (t, Ttrk4, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+
+        self.airConditioner.reset_timer()
+        t, Ttpc = pc(self.airConditioner.act, 0, self.tf, n, self.Tr)
+        self.int_res[Integrator.PC.value] = (t, Ttpc, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+       
+        for v in range(len(t)):
+            s = 0
+            for i in range(Integrator.COUNT.value - 1):
+                idx = i + 1
+                if idx == Integrator.RKF.value:
+                    continue
+                # print("index", idx)
+                # print(len(self.int_res[idx][1]))
+                s = s + self.int_res[idx][1][v]
+            self.ground_truth.append(s / (Integrator.COUNT.value - 2))
+            self.t_truth.append(t[v])
+
     def simulate(self, button):
-        self.first_sim_run = True
+        if (not self.first_sim_run):
+            self.calc_ground_truth()
 
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
         self.airConditioner.reset_timer()
@@ -197,6 +240,9 @@ class MatWindow(Gtk.Window):
         self.airConditioner.reset_timer()
         t, Ttpc = pc(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
         self.int_res[Integrator.PC.value] = (t, Ttpc, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+                    
+
+        self.first_sim_run = True
 
         self.plot(button)
 
@@ -209,6 +255,8 @@ class MatWindow(Gtk.Window):
         self.ax.set_xlabel('t')
         self.ax.set_ylabel('room temperature')
         self.ax.grid(True)
+        t = self.int_res[Integrator.EULER.value][0]
+        self.ax.plot(self.t_truth, self.ground_truth, label="Ground Truth")
 
         if (self.integrators[Integrator.EULER.value] == True):
             t = self.int_res[Integrator.EULER.value][0]
@@ -308,7 +356,7 @@ class MatWindow(Gtk.Window):
     def tf_spin_changed(self, scroll):
         self.tf = scroll.get_value()
     def n_spin_changed(self, scroll):
-        self.n = scroll.get_value()
+        self.n = scroll.get_value_as_int()
 
     def on_name_combo_changed(self, combo):
         tree_iter = combo.get_active_iter()

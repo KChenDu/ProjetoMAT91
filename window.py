@@ -1,3 +1,17 @@
+from enum import Enum
+
+
+class Integrator(Enum):
+    EULER = 1
+    TAYLOR2 = 2
+    TRAPEZIUM = 3
+    MEAN = 4
+    RK4 = 5
+    RKF = 6
+    PC = 7
+    COUNT = 8
+
+
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
@@ -13,9 +27,11 @@ from methods import euler, taylor2, trapezium, mean, rk4, rkf, pc
 def create_param_spin(title, initial, callback):
     adjustment = Gtk.Adjustment(upper=500, step_increment=0.1, page_increment=1)
     box_param = Gtk.Box()
-    box_param.set_homogeneous(False)
+    box_param.set_homogeneous(True)
 
     param_label = Gtk.Label(label=title)
+    param_label.set_justify(Gtk.Justification.LEFT)
+    param_label.set_halign(Gtk.Align.START)
     box_param.pack_start(param_label, True, True, 0)
     param_spin_button = Gtk.SpinButton()
     param_spin_button.set_adjustment(adjustment)
@@ -27,6 +43,19 @@ def create_param_spin(title, initial, callback):
 
     return box_param
 
+def create_integrator_type_checkbox(title, callback):
+    box = Gtk.Box()
+    box.set_homogeneous(True)
+    label = Gtk.Label(label=title)
+    label.set_justify(Gtk.Justification.LEFT)
+    label.set_halign(Gtk.Align.START)
+    box.pack_start(label, True, True, 0)
+
+    check = Gtk.CheckButton()
+    box.pack_start(check, True, True, 0)
+    check.connect("toggled", callback)
+
+    return box
 
 class MatWindow(Gtk.Window):
     def __init__(self):
@@ -43,9 +72,13 @@ class MatWindow(Gtk.Window):
         self.n = 500  # step number
         self.mode = Mode.HEAT
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
+        self.integrators = [False] * Integrator.COUNT.value
+        self.int_functions = [euler, taylor2, trapezium, mean, rk4, rkf, pc]
+        self.int_res = [( [1], [1] )] * Integrator.COUNT.value
 
         self.set_border_width(10)
         self.set_default_size(1920, 1080)
+        self.first_sim_run = False
 
         header_bar = Gtk.HeaderBar()
         header_bar.set_show_close_button(True)
@@ -55,8 +88,7 @@ class MatWindow(Gtk.Window):
         pane = Gtk.Paned()
         self.add(pane)
 
-        frame1 = Gtk.Frame()
-        frame1.set_shadow_type(Gtk.ShadowType.IN)
+        frame1 = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
         pane.pack1(frame1, True, True)
 
         param_frame = Gtk.Frame(label="Parametros Ar Condicionado")
@@ -84,12 +116,39 @@ class MatWindow(Gtk.Window):
         self.param_box.add(box_tf)
         box_n = create_param_spin("Steps:", self.n, self.n_spin_changed)
         self.param_box.add(box_n)
+        mode = Gtk.ListStore(int, str)
+        mode.append([1, "Cool"])
+        mode.append([2, "Heat"])
+        name_combo = Gtk.ComboBox.new_with_model_and_entry(mode)
+        name_combo.connect("changed", self.on_name_combo_changed)
+        name_combo.set_entry_text_column(1)
+        self.param_box.add(name_combo)
 
-        # Just for testing
-        temp_button = Gtk.Button.new_with_label("Simulate")
-        temp_button.connect("clicked", self.plot)
-        self.param_box.add(temp_button)
-        #####
+        integrator_frame = Gtk.Frame(label="Método de Integração")
+        integrator_frame.set_shadow_type(Gtk.ShadowType.IN)
+        frame1.add(integrator_frame)
+        self.int_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        integrator_frame.add(self.int_box)
+
+        int_euler = create_integrator_type_checkbox("Euler: ", self.toggle_integrator_euler)
+        int_taylor2 = create_integrator_type_checkbox("Taylor2: ", self.toggle_integrator_taylor2)
+        int_trapezium = create_integrator_type_checkbox("Trapezium: ", self.toggle_integrator_trapezium)
+        int_mean = create_integrator_type_checkbox("Mean: ", self.toggle_integrator_mean)
+        int_rk4 = create_integrator_type_checkbox("RK4: ", self.toggle_integrator_rk4)
+        int_rkf = create_integrator_type_checkbox("RKf: ", self.toggle_integrator_rkf)
+        int_pc = create_integrator_type_checkbox("PC: ", self.toggle_integrator_pc)
+
+        self.int_box.add(int_euler)
+        self.int_box.add(int_taylor2)
+        self.int_box.add(int_trapezium)
+        self.int_box.add(int_mean)
+        self.int_box.add(int_rk4)
+        self.int_box.add(int_rkf)
+        self.int_box.add(int_pc)
+
+        sim_button = Gtk.Button.new_with_label("Simulate")
+        sim_button.connect("clicked", self.simulate)
+        self.int_box.pack_end(sim_button, False, True, 0)
 
         frame2 = Gtk.Frame()
         frame2.set_shadow_type(Gtk.ShadowType.IN)
@@ -97,16 +156,118 @@ class MatWindow(Gtk.Window):
 
         self.fig = Figure(figsize=(5, 4), dpi=100)
         self.ax = self.fig.add_subplot()
+        self.ax.grid(True)
+        self.ax.set_title('Air conditioning a room')
+        self.ax.set_xlabel('t')
+        self.ax.set_ylabel('room temperature')
         self.canvas = FigureCanvas(self.fig)  # a Gtk.DrawingArea
         self.canvas.set_size_request(800, 600)
         frame2.add(self.canvas)
 
-    def plot(self, button):
+    def simulate(self, button):
+        self.first_sim_run = True
+
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
+
         t, Teuler = euler(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
+        self.int_res[Integrator.EULER.value] = (t, Teuler)
+
+        t, Ttaylor2 = taylor2(self.airConditioner.act, self.airConditioner.act_t, self.airConditioner.act_y, 0, self.tf, self.n, self.Tr)
+        self.int_res[Integrator.TAYLOR2.value] = (t, Ttaylor2)
+
+        t, Ttrapezium = trapezium(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
+        self.int_res[Integrator.TRAPEZIUM.value] = (t, Ttrapezium)
+
+        t, Ttmean = mean(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
+        self.int_res[Integrator.MEAN.value] = (t, Ttmean)
+
+        t, Ttrk4 = rk4(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
+        self.int_res[Integrator.RK4.value] = (t, Ttrk4)
+
+        t, Ttrkf = rkf(self.airConditioner.act, 0, self.tf, self.Tr, 0.1, 0.1, 0.01)
+        self.int_res[Integrator.RKF.value] = (t, Ttrkf)
+
+        t, Ttpc = pc(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
+        self.int_res[Integrator.PC.value] = (t, Ttpc)
+
+        self.plot(button)
+
+    def plot(self, button):
+        if (not self.first_sim_run):
+            return
+
         self.ax.clear()
-        self.ax.plot(t, Teuler)
+        self.ax.set_title('Air conditioning a room')
+        self.ax.set_xlabel('t')
+        self.ax.set_ylabel('room temperature')
+        self.ax.grid(True)
+
+        if (self.integrators[Integrator.EULER.value] == True):
+            t = self.int_res[Integrator.EULER.value][0]
+            Teuler = self.int_res[Integrator.EULER.value][1]
+            self.ax.plot(t, Teuler, label="Euler")
+
+        if (self.integrators[Integrator.TAYLOR2.value] == True):
+            t = self.int_res[Integrator.TAYLOR2.value][0]
+            Ttaylor2 = self.int_res[Integrator.TAYLOR2.value][1]
+            self.ax.plot(t, Ttaylor2, label="Taylor2")
+
+        if (self.integrators[Integrator.TRAPEZIUM.value] == True):
+            t = self.int_res[Integrator.TRAPEZIUM.value][0]
+            Ttrapezium = self.int_res[Integrator.TRAPEZIUM.value][1]
+            self.ax.plot(t, Ttrapezium, label="Trapezium")
+
+        if (self.integrators[Integrator.MEAN.value] == True):
+            t = self.int_res[Integrator.MEAN.value][0]
+            Ttmean = self.int_res[Integrator.MEAN.value][1]
+            self.ax.plot(t, Ttmean, label="Mean")
+
+        if (self.integrators[Integrator.RK4.value] == True):
+            t = self.int_res[Integrator.RK4.value][0]
+            Ttrk4 = self.int_res[Integrator.RK4.value][1]
+            self.ax.plot(t, Ttrk4, label="RK4")
+
+        if (self.integrators[Integrator.RKF.value] == True):
+            t = self.int_res[Integrator.RKF.value][0]
+            Ttrkf = self.int_res[Integrator.RKF.value][1]
+            self.ax.plot(t, Ttrkf, label="RKF")
+
+        if (self.integrators[Integrator.PC.value] == True):
+            t = self.int_res[Integrator.PC.value][0]
+            Ttpc = self.int_res[Integrator.PC.value][1]
+            self.ax.plot(t, Ttpc, label="PC")
+
+
+        self.ax.legend()
         self.canvas.draw()
+
+    def toggle_integrator_euler(self, integrator):
+        self.integrators[Integrator.EULER.value] = not self.integrators[Integrator.EULER.value]
+        self.plot(integrator)
+
+    def toggle_integrator_taylor2(self, integrator):
+        self.integrators[Integrator.TAYLOR2.value] = not self.integrators[Integrator.TAYLOR2.value]
+        self.plot(integrator)
+
+    def toggle_integrator_trapezium(self, integrator):
+        self.integrators[Integrator.TRAPEZIUM.value] = not self.integrators[Integrator.TRAPEZIUM.value]
+        self.plot(integrator)
+        
+    def toggle_integrator_mean(self, integrator):
+        self.integrators[Integrator.MEAN.value] = not self.integrators[Integrator.MEAN.value]
+        self.plot(integrator)
+
+    def toggle_integrator_rk4(self, integrator):
+        self.integrators[Integrator.RK4.value] = not self.integrators[Integrator.RK4.value]
+        self.plot(integrator)
+
+    def toggle_integrator_rkf(self, integrator):
+        self.integrators[Integrator.RKF.value] = not self.integrators[Integrator.RKF.value]
+        self.plot(integrator)
+
+    def toggle_integrator_pc(self, integrator):
+        self.integrators[Integrator.PC.value] = not self.integrators[Integrator.PC.value]
+        self.plot(integrator)
 
     def tac_spin_changed(self, scroll):
         self.Tac = scroll.get_value()
@@ -126,3 +287,13 @@ class MatWindow(Gtk.Window):
         self.tf = scroll.get_value()
     def n_spin_changed(self, scroll):
         self.n = scroll.get_value()
+
+    def on_name_combo_changed(self, combo):
+        tree_iter = combo.get_active_iter()
+        if tree_iter is not None:
+            model = combo.get_model()
+            row_id, name = model[tree_iter][:2]
+            if row_id == 1:
+                self.mode = Mode.COOL
+            else:
+                self.mode = Mode.HEAT

@@ -195,21 +195,20 @@ class MatWindow(Gtk.Window):
         t, Ttpc = pc(self.airConditioner.act, 0, self.tf, n, self.Tr)
         self.int_res[Integrator.PC.value] = (t, Ttpc, self.airConditioner.get_period(), self.airConditioner.get_action_time())
        
+        self.ground_truth = []
+        self.t_truth = []
         for v in range(len(t)):
             s = 0
             for i in range(Integrator.COUNT.value - 1):
                 idx = i + 1
                 if idx == Integrator.RKF.value:
                     continue
-                # print("index", idx)
-                # print(len(self.int_res[idx][1]))
                 s = s + self.int_res[idx][1][v]
             self.ground_truth.append(s / (Integrator.COUNT.value - 2))
             self.t_truth.append(t[v])
 
     def simulate(self, button):
-        if (not self.first_sim_run):
-            self.calc_ground_truth()
+        self.calc_ground_truth()
 
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
         self.airConditioner.reset_timer()

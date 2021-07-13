@@ -78,6 +78,8 @@ class MatWindow(Gtk.Window):
         self.int_res = [( [1], [1], 0, 0, 0 )] * Integrator.COUNT.value
         self.t_truth = []
         self.ground_truth = []
+        self.period_truth = 0
+        self.action_time_truth = 0
 
         self.set_border_width(10)
         self.set_default_size(1920, 1080)
@@ -208,6 +210,17 @@ class MatWindow(Gtk.Window):
             self.ground_truth.append(s / (Integrator.COUNT.value - 2))
             self.t_truth.append(t[v])
 
+        p = 0
+        a = 0
+        for i in range(Integrator.COUNT.value - 1):
+            idx = i + 1
+            if idx == Integrator.RKF.value:
+                continue
+            p = p + self.int_res[idx][2]
+            a = a + self.int_res[idx][3]
+        self.period_truth = p / (Integrator.COUNT.value - 2)
+        self.action_time_truth = a / (Integrator.COUNT.value - 2)
+
     def simulate(self, button):
         self.calc_ground_truth()
 
@@ -269,8 +282,9 @@ class MatWindow(Gtk.Window):
         self.ax.set_xlabel('t')
         self.ax.set_ylabel('room temperature')
         self.ax.grid(True)
-        t = self.int_res[Integrator.EULER.value][0]
-        self.ax.plot(self.t_truth, self.ground_truth, label="Ground Truth")
+        period = round(self.period_truth, 4)
+        action_time = round(self.action_time_truth, 4)
+        self.ax.plot(self.t_truth, self.ground_truth, label="Ground Truth, Period = " + str(period) + ", Action Time = " + str(action_time))
 
         if (self.integrators[Integrator.EULER.value] == True):
             t = self.int_res[Integrator.EULER.value][0]
@@ -278,6 +292,7 @@ class MatWindow(Gtk.Window):
             period = self.int_res[Integrator.EULER.value][2]
             action_time = self.int_res[Integrator.EULER.value][3]
             time_elapsed = self.int_res[Integrator.EULER.value][4]
+            period = round(period, 4)
             action_time = round(action_time, 4)
             time_elapsed = round(time_elapsed, 4)
             self.ax.plot(t, Teuler, label="Euler, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")

@@ -71,6 +71,9 @@ class MatWindow(Gtk.Window):
         self.Tr = 18  # initial room temperature
         self.tf = 100  # time extension for analysis
         self.n = 500  # step number
+        self.tol = 0.1
+        self.kmin = 0.01
+        self.kmax = 0.1
         self.mode = Mode.HEAT
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
         self.integrators = [False] * Integrator.COUNT.value
@@ -120,6 +123,12 @@ class MatWindow(Gtk.Window):
         box_tf = create_param_spin("Time Extensionf for analysis (tf):", self.tf, self.tf_spin_changed, 1.0)
         self.param_box.add(box_tf)
         box_n = create_param_spin("Number of Steps (n):", self.n, self.n_spin_changed, 1.0)
+        self.param_box.add(box_n)
+        box_n = create_param_spin("Tolerance (RKF):", self.tol, self.tol_spin_changed, 0.1)
+        self.param_box.add(box_n)
+        box_n = create_param_spin("Kmin (RKF):", self.kmin, self.kmin_spin_changed, 0.01)
+        self.param_box.add(box_n)
+        box_n = create_param_spin("Kmax (RKF):", self.kmax, self.kmax_spin_changed, 0.1)
         self.param_box.add(box_n)
         mode = Gtk.ListStore(int, str)
         mode.append([1, "Cool"])
@@ -258,7 +267,7 @@ class MatWindow(Gtk.Window):
 
         self.airConditioner.reset_timer()
         start = time()
-        t, Ttrkf = rkf(self.airConditioner.act, 0, self.tf, self.Tr, 0.1, 0.1, 0.01)
+        t, Ttrkf = rkf(self.airConditioner.act, 0, self.tf, self.Tr, self.tol, self.kmax, self.kmin)
         end = time()
         self.int_res[Integrator.RKF.value] = (t, Ttrkf, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
 
@@ -413,6 +422,12 @@ class MatWindow(Gtk.Window):
         self.tf = scroll.get_value()
     def n_spin_changed(self, scroll):
         self.n = scroll.get_value_as_int()
+    def tol_spin_changed(self, scroll):
+        self.tol = scroll.get_value()
+    def kmin_spin_changed(self, scroll):
+        self.kmin = scroll.get_value()
+    def kmax_spin_changed(self, scroll):
+        self.kmax = scroll.get_value()
 
     def on_name_combo_changed(self, combo):
         tree_iter = combo.get_active_iter()

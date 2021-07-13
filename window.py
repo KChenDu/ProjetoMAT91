@@ -1,4 +1,5 @@
 from enum import Enum
+from time import time
 
 
 class Integrator(Enum):
@@ -74,7 +75,7 @@ class MatWindow(Gtk.Window):
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
         self.integrators = [False] * Integrator.COUNT.value
         self.int_functions = [euler, taylor2, trapezium, mean, rk4, rkf, pc]
-        self.int_res = [( [1], [1], 0, 0 )] * Integrator.COUNT.value
+        self.int_res = [( [1], [1], 0, 0, 0 )] * Integrator.COUNT.value
         self.t_truth = []
         self.ground_truth = []
 
@@ -213,32 +214,46 @@ class MatWindow(Gtk.Window):
         self.airConditioner = AirConditioner(self.Tr, self.Tac, self.Tout, self.k, self.kac, self.Tc_low, self.Tc_high, self.mode)
         self.airConditioner.reset_timer()
 
+        start = time()
         t, Teuler = euler(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.EULER.value] = (t, Teuler, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+        end = time()
+        self.int_res[Integrator.EULER.value] = (t, Teuler, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
 
         self.airConditioner.reset_timer()
+        start = time()
         t, Ttaylor2 = taylor2(self.airConditioner.act, self.airConditioner.act_t, self.airConditioner.act_y, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.TAYLOR2.value] = (t, Ttaylor2, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+        end = time()
+        self.int_res[Integrator.TAYLOR2.value] = (t, Ttaylor2, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
 
         self.airConditioner.reset_timer()
+        start = time()
         t, Ttrapezium = trapezium(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.TRAPEZIUM.value] = (t, Ttrapezium, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+        end = time()
+        self.int_res[Integrator.TRAPEZIUM.value] = (t, Ttrapezium, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
 
         self.airConditioner.reset_timer()
+        start = time()
         t, Ttmean = mean(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.MEAN.value] = (t, Ttmean, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+        end = time()
+        self.int_res[Integrator.MEAN.value] = (t, Ttmean, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
 
         self.airConditioner.reset_timer()
+        start = time()
         t, Ttrk4 = rk4(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.RK4.value] = (t, Ttrk4, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+        end = time()
+        self.int_res[Integrator.RK4.value] = (t, Ttrk4, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
 
         self.airConditioner.reset_timer()
+        start = time()
         t, Ttrkf = rkf(self.airConditioner.act, 0, self.tf, self.Tr, 0.1, 0.1, 0.01)
-        self.int_res[Integrator.RKF.value] = (t, Ttrkf, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+        end = time()
+        self.int_res[Integrator.RKF.value] = (t, Ttrkf, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
 
         self.airConditioner.reset_timer()
+        start = time()
         t, Ttpc = pc(self.airConditioner.act, 0, self.tf, self.n, self.Tr)
-        self.int_res[Integrator.PC.value] = (t, Ttpc, self.airConditioner.get_period(), self.airConditioner.get_action_time())
+        end = time()
+        self.int_res[Integrator.PC.value] = (t, Ttpc, self.airConditioner.get_period(), self.airConditioner.get_action_time(), (end - start) * 1000)
                     
 
         self.first_sim_run = True
@@ -262,49 +277,76 @@ class MatWindow(Gtk.Window):
             Teuler = self.int_res[Integrator.EULER.value][1]
             period = self.int_res[Integrator.EULER.value][2]
             action_time = self.int_res[Integrator.EULER.value][3]
-            self.ax.plot(t, Teuler, label="Euler, Period = " + str(period) + ", Action Time = " + str(action_time))
+            time_elapsed = self.int_res[Integrator.EULER.value][4]
+            action_time = round(action_time, 4)
+            time_elapsed = round(time_elapsed, 4)
+            self.ax.plot(t, Teuler, label="Euler, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")
 
         if (self.integrators[Integrator.TAYLOR2.value] == True):
             t = self.int_res[Integrator.TAYLOR2.value][0]
             Ttaylor2 = self.int_res[Integrator.TAYLOR2.value][1]
             period = self.int_res[Integrator.TAYLOR2.value][2]
             action_time = self.int_res[Integrator.TAYLOR2.value][3]
-            self.ax.plot(t, Ttaylor2, label="Taylor2, Period = " + str(period) + ", Action Time = " + str(action_time))
+            time_elapsed = self.int_res[Integrator.TAYLOR2.value][4]
+            period = round(period, 4)
+            action_time = round(action_time, 4)
+            time_elapsed = round(time_elapsed, 4)
+            self.ax.plot(t, Ttaylor2, label="Taylor2, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")
 
         if (self.integrators[Integrator.TRAPEZIUM.value] == True):
             t = self.int_res[Integrator.TRAPEZIUM.value][0]
             Ttrapezium = self.int_res[Integrator.TRAPEZIUM.value][1]
             period = self.int_res[Integrator.TRAPEZIUM.value][2]
             action_time = self.int_res[Integrator.TRAPEZIUM.value][3]
-            self.ax.plot(t, Ttrapezium, label="Trapezium, Period = " + str(period) + ", Action Time = " + str(action_time))
+            time_elapsed = self.int_res[Integrator.TRAPEZIUM.value][4]
+            period = round(period, 4)
+            action_time = round(action_time, 4)
+            time_elapsed = round(time_elapsed, 4)
+            self.ax.plot(t, Ttrapezium, label="Trapezium, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")
 
         if (self.integrators[Integrator.MEAN.value] == True):
             t = self.int_res[Integrator.MEAN.value][0]
             Ttmean = self.int_res[Integrator.MEAN.value][1]
             period = self.int_res[Integrator.MEAN.value][2]
             action_time = self.int_res[Integrator.MEAN.value][3]
-            self.ax.plot(t, Ttmean, label="Mean, Period = " + str(period) + ", Action Time = " + str(action_time))
+            time_elapsed = self.int_res[Integrator.MEAN.value][4]
+            period = round(period, 4)
+            action_time = round(action_time, 4)
+            time_elapsed = round(time_elapsed, 4)
+            self.ax.plot(t, Ttmean, label="Mean, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")
 
         if (self.integrators[Integrator.RK4.value] == True):
             t = self.int_res[Integrator.RK4.value][0]
             Ttrk4 = self.int_res[Integrator.RK4.value][1]
             period = self.int_res[Integrator.RK4.value][2]
             action_time = self.int_res[Integrator.RK4.value][3]
-            self.ax.plot(t, Ttrk4, label="RK4, Period = " + str(period) + ", Action Time = " + str(action_time))
+            time_elapsed = self.int_res[Integrator.RK4.value][4]
+            period = round(period, 4)
+            action_time = round(action_time, 4)
+            time_elapsed = round(time_elapsed, 4)
+            self.ax.plot(t, Ttrk4, label="RK4, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")
 
         if (self.integrators[Integrator.RKF.value] == True):
             t = self.int_res[Integrator.RKF.value][0]
             Ttrkf = self.int_res[Integrator.RKF.value][1]
             period = self.int_res[Integrator.RKF.value][2]
             action_time = self.int_res[Integrator.RKF.value][3]
-            self.ax.plot(t, Ttrkf, label="RKF, Period = " + str(period) + ", Action Time = " + str(action_time))
+            time_elapsed = self.int_res[Integrator.RKF.value][4]
+            period = round(period, 4)
+            action_time = round(action_time, 4)
+            time_elapsed = round(time_elapsed, 4)
+            self.ax.plot(t, Ttrkf, label="RKF, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")
 
         if (self.integrators[Integrator.PC.value] == True):
             t = self.int_res[Integrator.PC.value][0]
             Ttpc = self.int_res[Integrator.PC.value][1]
             period = self.int_res[Integrator.PC.value][2]
             action_time = self.int_res[Integrator.PC.value][3]
-            self.ax.plot(t, Ttpc, label="PC, Period = " + str(period) + ", Action Time = " + str(action_time))
+            time_elapsed = self.int_res[Integrator.PC.value][4]
+            period = round(period, 4)
+            action_time = round(action_time, 4)
+            time_elapsed = round(time_elapsed, 4)
+            self.ax.plot(t, Ttpc, label="PC, Period = " + str(period) + ", Action Time = " + str(action_time) + ", Elapsed Time = " + str(time_elapsed) + "ms")
 
 
         self.ax.legend()
